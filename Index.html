@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Book Finder</title>
+  <meta name="description" content="Simple Book Finder using Open Library Search API. Search by title, author or ISBN and view covers & details." />
+  <style>
+    /* Simple, clean, responsive styling. No external dependencies. */
+    :root{
+      --bg:#0f1724; --card:#0b1220; --muted:#94a3b8; --accent:#7c3aed; --glass: rgba(255,255,255,0.03);
+      --max-width:1100px;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0; font-family:Inter,ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,"Helvetica Neue",Arial;
+      background: linear-gradient(180deg,#071026 0%, #041021 100%); color:#e6eef8; -webkit-font-smoothing:antialiased;
+      padding:24px; display:flex; align-items:flex-start; justify-content:center;
+    }
+    .app{width:100%; max-width:var(--max-width)}
+    header{display:flex;align-items:center;gap:16px;margin-bottom:18px}
+    header h1{margin:0;font-size:20px}
+    .controls{display:flex;gap:12px;flex-wrap:wrap}
+    .searchBox{display:flex;gap:8px;align-items:center;background:var(--glass);padding:10px;border-radius:12px;box-shadow:0 4px 18px rgba(2,6,23,0.6)}
+    input[type=text]{background:transparent;border:0;outline:none;color:inherit;padding:8px 6px;width:320px}
+    select, button{background:linear-gradient(180deg,#122235,#0b1a2b);color:var(--muted);border:1px solid rgba(255,255,255,0.03);padding:8px;border-radius:8px}
+    button.primary{background:linear-gradient(90deg,var(--accent),#4f46e5);color:white;border:0}
+    .helpers{color:var(--muted);font-size:13px;margin-bottom:12px}
+    .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:14px}
+    .card{background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));padding:12px;border-radius:12px;border:1px solid rgba(255,255,255,0.03);display:flex;flex-direction:column;gap:10px}
+    .cover{width:100%;height:240px;background:#071026;border-radius:8px;background-size:cover;background-position:center}
+    .title{font-weight:600;font-size:14px;line-height:1.2}
+    .meta{font-size:13px;color:var(--muted)}
+    .small{font-size:12px;color:var(--muted)}
+    .footer{display:flex;justify-content:space-between;align-items:center;margin-top:12px}
+    .pager{display:flex;gap:8px}
+    .pill{padding:6px 10px;border-radius:999px;background:rgba(255,255,255,0.02);font-size:13px}
+    /* modal */
+    .modal-backdrop{position:fixed;inset:0;background:rgba(2,6,23,0.6);display:none;align-items:center;justify-content:center;padding:24px}
+    .modal{background:linear-gradient(180deg,#071423,#081726);padding:18px;border-radius:12px;max-width:900px;width:100%;box-shadow:0 12px 40px rgba(2,6,23,0.7)}
+    .modal-grid{display:grid;grid-template-columns:220px 1fr;gap:16px}
+    .tags{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+    .tag{background:rgba(255,255,255,0.03);padding:6px 8px;border-radius:8px;font-size:12px;color:var(--muted)}
+    .loading{padding:18px;text-align:center;color:var(--muted)}
+    .error{color:#ffb4b4;background:rgba(255,80,80,0.06);padding:10px;border-radius:8px}
+    @media (max-width:600px){
+      input[type=text]{width:160px}
+      .modal-grid{grid-template-columns:1fr}
+      .cover{height:200px}
+    }
+  </style>
+</head>
+<body>
+  <main class="app" role="main">
+    <header>
+      <div>
+        <h1>📚 Book Finder</h1>
+        <div class="helpers">Search books quickly using Open Library. Try titles, authors, or ISBNs.</div>
+      </div>
+    </header>
+
+    <section class="controls">
+      <div class="searchBox" role="search" aria-label="Book search box">
+        <input id="q" type="text" placeholder="Search by title, author or ISBN..." aria-label="Search" />
+        <select id="searchBy" title="Search type">
+          <option value="q">All fields</option>
+          <option value="title">Title</option>
+          <option value="author">Author</option>
+          <option value="isbn">ISBN</option>
+        </select>
+        <button id="searchBtn" class="primary">Search</button>
+        <button id="clearBtn" title="Clear">Clear</button>
+      </div>
+      <div class="pill" id="resultInfo">No search yet</div>
+    </section>
+
+    <div id="message" style="margin-top:12px"></div>
+
+    <section id="results" style="margin-top:12px">
+      <div class="loading" id="loading" style="display:none">Searching...</div>
+      <div class="grid" id="grid"></div>
+      <div class="footer" style="display:none;" id="footer">
+        <div class="pager">
+          <button id="prev">◀ Prev</button>
+          <button id="next">Next ▶</button>
+        </div>
+        <div class="small" id="pageInfo"></div>
+      </div>
+    </section>
+
+    <!-- Modal for book details -->
+    <div id="modalBackdrop" class="modal-backdrop" role="dialog" aria-modal="true" aria-hidden="true">
+      <div class="modal" role="document">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <strong id="modalTitle">Book details</strong>
+          <button id="closeModal">Close ✖</button>
+        </div>
+        <div class="modal-grid" style="margin-top:12px">
+          <div>
+            <div id="modalCover" class="cover"></div>
+            <div class="small" id="modalISBN" style="margin-top:8px"></div>
+          </div>
+          <div>
+            <div id="modalMeta" class="meta"></div>
+            <div id="modalSubjects" class="tags"></div>
+            <div style="margin-top:12px">
+              <a id="openLibLink" href="#" target="_blank" rel="noopener" class="pill">Open on OpenLibrary</a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <script>
+    // Book Finder using Open Library Search API
+    // Author: Generated for Alex (college student). Single-file app — copy/paste into index.html and open in browser.
+
+    const searchInput = document.getElementById('q');
+    const searchBy = document.getElementById('searchBy');
+    const searchBtn = document.getElementById('searchBtn');
+    const clearBtn = document.getElementById('clearBtn');
+    const grid = document.getElementById('grid');
+    const loading = document.getElementById('loading');
+    const message = document.getElementById('message');
+    const footer = document.getElementById('footer');
+    const prev = document.getElementById('prev');
+    const next = document.getElementById('next');
+    const pageInfo = document.getElementById('pageInfo');
+    const resultInfo = document.getElementById('resultInfo');
+
+    const modalBackdrop = document.getElementById('modalBackdrop');
+    const closeModal = document.getElementById('closeModal');
+    const modalTitle = document.getElementById('modalTitle');
+    const modalCover = document.getElementById('modalCover');
+    const modalMeta = document.getElementById('modalMeta');
+    const modalSubjects = document.getElementById('modalSubjects');
+    const modalISBN = document.getElementById('modalISBN');
+    const openLibLink = document.getElementById('openLibLink');
+
+    let currentPage = 1;
+    const PAGE_SIZE = 20; // Open Library default page-size manageable
+    let lastQuery = '';
+    let lastSearchType = 'q';
+    let lastNumFound = 0;
+
+    function showLoading(on){loading.style.display = on ? 'block':'none';}
+    function showMessage(html, isError){message.innerHTML = html; message.className = isError? 'error':''}
+
+    function coverUrl(doc){
+      if(doc.cover_i) return `https://covers.openlibrary.org/b/id/${doc.cover_i}-L.jpg`;
+      // try other fields like isbn
+      if(doc.isbn && doc.isbn.length) return `https://covers.openlibrary.org/b/isbn/${doc.isbn[0]}-L.jpg`;
+      return 'data:image/svg+xml;utf8,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="400" height="600"><rect width="100%" height="100%" fill="#071026"/><text x="50%" y="50%" font-family="Arial" font-size="20" fill="#7b8794" text-anchor="middle">No cover</text></svg>`);
+    }
+
+    async function searchBooks(q, type='q', page=1){
+      // Build a safe query for Open Library search. Use the parameter matching the user's selected type.
+      const base = 'https://openlibrary.org/search.json';
+      const params = new URLSearchParams();
+      params.set('page', page);
+      params.set('limit', PAGE_SIZE);
+
+      if(!q || !q.trim()){ showMessage('Please enter something to search.', true); return; }
+
+      if(type === 'q') params.set('q', q);
+      else params.set(type, q);
+
+      const url = `${base}?${params.toString()}`;
+
+      showLoading(true); showMessage('');
+      try{
+        const res = await fetch(url);
+        if(!res.ok) throw new Error('Network response not ok');
+        const data = await res.json();
+        showLoading(false);
+        return data;
+      }catch(err){
+        showLoading(false);
+        showMessage('Network error: ' + err.message, true);
+        return null;
+      }
+    }
+
+    function renderResults(docs, start){
+      grid.innerHTML = '';
+      if(!docs || docs.length === 0){
+        showMessage('No results found. Try a broader search or check spelling.', true);
+        footer.style.display = 'none';
+        resultInfo.textContent = '0 results';
+        return;
+      }
+
+      docs.forEach((doc, idx)=>{
+        const card = document.createElement('article'); card.className = 'card'; card.tabIndex = 0;
+        const img = document.createElement('div'); img.className = 'cover'; img.style.backgroundImage = `url('${coverUrl(doc)}')`;
+        img.setAttribute('role','img'); img.setAttribute('aria-label', doc.title || 'book cover');
+        const t = document.createElement('div'); t.className='title'; t.textContent = doc.title || 'Untitled';
+        const a = document.createElement('div'); a.className='meta'; a.textContent = (doc.author_name ? doc.author_name.join(', '): 'Unknown author');
+        const y = document.createElement('div'); y.className='small'; y.textContent = doc.first_publish_year ? ('First published: ' + doc.first_publish_year) : '';
+        const btn = document.createElement('button'); btn.textContent = 'Details'; btn.className='';
+        btn.addEventListener('click', ()=> openModal(doc));
+
+        card.appendChild(img); card.appendChild(t); card.appendChild(a); card.appendChild(y); card.appendChild(btn);
+        grid.appendChild(card);
+      });
+    }
+
+    function openModal(doc){
+      modalTitle.textContent = doc.title || 'Untitled';
+      modalCover.style.backgroundImage = `url('${coverUrl(doc)}')`;
+      modalMeta.innerHTML = `
+        <div><strong>Author:</strong> ${doc.author_name ? doc.author_name.join(', '): 'Unknown'}</div>
+        <div><strong>First publish year:</strong> ${doc.first_publish_year || '—'}</div>
+        <div><strong>Edition count:</strong> ${doc.edition_count || '—'}</div>
+        <div><strong>Language:</strong> ${doc.language ? doc.language.join(', ') : '—'}</div>
+      `;
+      modalSubjects.innerHTML = '';
+      if(doc.subject) doc.subject.slice(0,12).forEach(s=>{
+        const sp=document.createElement('div'); sp.className='tag'; sp.textContent = s; modalSubjects.appendChild(sp);
+      });
+      modalISBN.textContent = doc.isbn ? ('ISBNs: ' + doc.isbn.slice(0,6).join(', ')) : '';
+      openLibLink.href = doc.key ? `https://openlibrary.org${doc.key}` : '#';
+
+      modalBackdrop.style.display = 'flex'; modalBackdrop.setAttribute('aria-hidden','false');
+    }
+
+    function closeDetails(){ modalBackdrop.style.display = 'none'; modalBackdrop.setAttribute('aria-hidden','true'); }
+
+    closeModal.addEventListener('click', closeDetails);
+    modalBackdrop.addEventListener('click', (e)=>{ if(e.target === modalBackdrop) closeDetails(); });
+
+    searchBtn.addEventListener('click', ()=>{ currentPage = 1; runSearch(); });
+    clearBtn.addEventListener('click', ()=>{ searchInput.value=''; grid.innerHTML=''; footer.style.display='none'; resultInfo.textContent='No search yet'; message.innerHTML=''; });
+
+    prev.addEventListener('click', ()=>{
+      if(currentPage>1){ currentPage--; runSearch(); }
+    });
+    next.addEventListener('click', ()=>{ const maxPage = Math.ceil(lastNumFound / PAGE_SIZE); if(currentPage < maxPage){ currentPage++; runSearch(); } });
+
+    // Debounce quick-typing a little for nicer UX
+    let debounceTimer;
+    searchInput.addEventListener('keyup', (e)=>{
+      if(e.key === 'Enter'){ currentPage=1; runSearch(); return; }
+      clearTimeout(debounceTimer); debounceTimer = setTimeout(()=>{ /* optional live suggestions could go here */ }, 300);
+    });
+
+    async function runSearch(){
+      const q = searchInput.value.trim();
+      const type = searchBy.value;
+      if(!q){ showMessage('Please enter search text', true); return; }
+      lastQuery = q; lastSearchType = type;
+      const data = await searchBooks(q, type, currentPage);
+      if(!data) return;
+      lastNumFound = data.numFound || 0;
+      resultInfo.textContent = `${lastNumFound} results (showing page ${currentPage})`;
+      renderResults(data.docs || [], (currentPage-1)*PAGE_SIZE + 1);
+
+      // show footer/pagination when many results
+      if(lastNumFound > PAGE_SIZE){ footer.style.display = 'flex'; pageInfo.textContent = `Page ${currentPage} of ${Math.max(1, Math.ceil(lastNumFound / PAGE_SIZE))}`; }
+      else footer.style.display = 'none';
+    }
+
+    // Accessibility: close modal with ESC
+    document.addEventListener('keydown', (e)=>{ if(e.key === 'Escape') closeDetails(); });
+
+    // Small helper: prefill an example for the student
+   // (function prefill(){ searchInput.value = 'harry potter'; searchBy.value='title'; resultInfo.textContent = 'Tip: try "Clean Code", "Eloquent JavaScript", or enter an ISBN like 9780132350884.'; })();
+
+  </script>
+</body>
+</html>
