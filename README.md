@@ -1,8 +1,3 @@
-Perfect 👍 You’ve got a great project here!
-Here’s a **detailed, professional, and easy-to-read README.md** file you can directly copy into your GitHub repo for your **Book Finder** app.
-
----
-
 ## 📚 Book Finder
 
 A simple and elegant **Book Finder Web App** built using the **Open Library Search API**.
@@ -12,8 +7,7 @@ It allows users to search for books by **title**, **author**, or **ISBN**, and v
 
 ### 🖥️ Live Demo
 
-👉 [View the App on CodeSandbox / StackBlitz](#)
-(*Replace the `#` with your deployed project link once available*)
+👉 [View the App on CodeSandbox / StackBlitz](https://codesandbox.io/p/sandbox/kn5739)
 
 ---
 
